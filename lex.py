@@ -1,6 +1,6 @@
 import ply.lex as lex
 
-literals = "=<>+-*(){}"
+literals = "=;(){}"
 
 reserved = {
     'do': 'DO',
@@ -20,7 +20,7 @@ t_ASSIGN = "<-"
 
 
 def t_NAME(t):
-    r"[_A-Za-z]+[_0-9A-Za-z]*"
+    r"[a-z][_0-9A-Za-z]*"
     t.type = reserved.get(t.value, "NAME")
     return t
 

@@ -1,25 +1,20 @@
 tests = [
     """main = do {
-    write read
+    write read;
     main
     }""",
     """main = do {
-    a <- read
-    b <- read
-    if a > b
+    a <- read;
+    b <- read;
+    if gt a b
         then write a
-        else write b
+        else write b;
+    main
     }"""
 ]
 
 if __name__ == "__main__":
-    from lex import lexer
+    from yacc import parser
     for test in tests:
-        lexer.input(test)
-        t = lexer.token()
-        while t:
-            print(t)
-            t = lexer.token()
-        print("END")
-
-    # from yacc import parser
+        print(test)
+        parser.parse(test)
