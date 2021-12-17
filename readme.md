@@ -1,44 +1,58 @@
 # nano-Haskell for HRM
 
 ## Example
-question 1-1
+puzzle 1-1
 ```
 main = do {
-    write read
+    write read;
     main
     }
 ```
-question ?-?
+
+puzzle ?-?
 ```
 main = do {
-    a <- read
-    b <- read
-    if a > b
+    a <- read;
+    b <- read;
+    if gt a b
         then write a
-        else write b
+        else write b;
+    main
     }
 ```
 
-## BNF grammer
+## BNF grammar
 ```
 PROG = FUNC PROG | empty
-FUNC = NAME "=" EXP
-EXP = "do" "{" STMTS "}" | "if" COMP "then" EXP ["else" EXP] | FEXP | COMP
-STMTS = STMT STMTS | EXP
-STMT = ASSIGN | EXP
-FEXP = NAME "(" AEXP ")"
-AEXP = NAME AEXP | empty
-ASSIGN = NAME "<-" EXPR
-COMP = MATH ">" COMP | MATH "<" COMP | MATH
-MATH = MATH "+" TERM | MATH "-" TERM | TERM
-TERM = TERM "*" FACTOR | FACTOR
-FACTOR = "(" MATH ")" | FEXP | NAME | CONST
-NAME = r"[_A-Za-z]+[_0-9A-Za-z]*"
+FUNC = NAME PARMS "=" EXPR
+PARMS = NAME PARMS | empty
+EXPR = "do" "{" STMTS "}" | "if" EXPR "then" EXPR "else" EXPR | CALL
+STMTS = STMT ";" STMTS | EXPR
+STMT = ASSG | EXPR
+ASSG = NAME "<-" EXPR
+CALL = NAME ARGS
+ARGS = ARG ARGS | empty
+ARG = "(" CALL ")" | NAME | CONST
+NAME = r"[a-z][_0-9A-Za-z]*"
 CONST = r"\d+"
 ```
 
-The default entrance point is `main` function.
+## Built-in (prelude) function and entry point
+### IO
+- `read` read in (action)
+- `write` write out (function)
+### Arithmetic
+- `gt` greater
+- `lt` less
+- `ge` greater or equal
+- `le` less or equal
+- `add` addition
+- `sub` subtraction
+- `mul` multiplication
 
-## recursion & tail recursion
+The default entry point is `main` function.
+
+## Recursion
+Currently, support tail recursion only.
 
 CPS transform
