@@ -20,11 +20,9 @@ def o_redundant_copy(hrm: List[Instrument]) -> Tuple[bool, List[Instrument]]:
     i = 0
     while i < len(hrm):
         opt.append(hrm[i])
-        if hrm[i].code == Instrument.CPT:
+        if hrm[i].code.startswith("COPY"):
             j = i + 1
-            while j < len(hrm) and\
-                (hrm[j].code == Instrument.CPT or hrm[j].code == Instrument.CPF) and\
-                    hrm[j].arg == hrm[i].arg:
+            while j < len(hrm) and hrm[j].code.startswith("COPY") and hrm[j].arg == hrm[i].arg:
                 j += 1
             i = j
         else:
