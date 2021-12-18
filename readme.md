@@ -34,7 +34,7 @@ CALL = NAME ARGS
 ARGS = ARG ARGS | empty
 ARG = "(" CALL ")" | NAME | CONST
 NAME = r"[a-z][_0-9A-Za-z]*"
-CONST = r"\d+"
+CONST = r"-?\d+"
 ```
 
 ## Built-in (prelude) function and entry point
@@ -42,6 +42,7 @@ CONST = r"\d+"
 - `read` read in (action)
 - `write` write out (function)
 ### Arithmetic
+- `eq` greater
 - `gt` greater
 - `lt` less
 - `ge` greater or equal
@@ -53,6 +54,38 @@ CONST = r"\d+"
 The default entry point is `main` function.
 
 ## Recursion
-Currently, support tail recursion only.
+Currently, support **non-cross parameter-less recursion** only.
 
-CPS transform
+## Optimization
+- Redundant copy
+```
+    ...
+    COPYTO x
+    COPYFROM x
+    ...
+```
+
+- Unref label
+```
+    ...
+a:
+    ...
+```
+
+- Continuous label
+```
+    ...
+a:
+b:
+    ...
+```
+
+- Immediate jump
+```
+    ...
+    JUMP a
+    ...
+a:
+    JUMP b
+    ...
+```

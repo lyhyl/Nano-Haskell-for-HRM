@@ -1,25 +1,13 @@
 import ply.yacc as yacc
 
-from compiler import (Assignment, Call, Context, DoBlock, Expression, Function, Gt, IfBlock,
-                      Read, Write, get_rec, header)
+from compiler import (Assignment, Call, DoBlock, Expression, Function, IfBlock)
 from lex import tokens
 
 
 def p_PROG(p):
     """PROG : FUNC PROG
             | FUNC"""
-    entry = Call("main", [])
-    context = Context(
-        [Write(), Gt()],
-        [Read()],
-        get_rec(p, 1, 2)
-    )
-    try:
-        insts = entry.emit(context)
-        insts = '\n'.join(str(i) for i in insts)
-        print(f"{header}\n{insts}")
-    except Exception as e:
-        print(e)
+    p[0] = [p[1]] + p[2] if len(p) == 3 else [p[1]]
 
 
 def p_FUNC(p):
@@ -30,7 +18,7 @@ def p_FUNC(p):
 def p_PARMS(p):
     """PARMS : NAME PARMS
              | empty"""
-    p[0] = get_rec(p, 1, 2)
+    p[0] = [p[1]] + p[2] if len(p) == 3 else []
 
 
 def p_EXPR(p):
@@ -48,7 +36,7 @@ def p_EXPR(p):
 def p_STMTS(p):
     """STMTS : STMT ';' STMTS
              | EXPR"""
-    p[0] = get_rec(p, 1, 3)
+    p[0] = [p[1]] + p[3] if len(p) == 4 else [p[1]]
 
 
 def p_STMT(p):
@@ -70,7 +58,7 @@ def p_CALL(p):
 def p_ARGS(p):
     """ARGS : ARG ARGS
             | empty"""
-    p[0] = get_rec(p, 1, 2)
+    p[0] = [p[1]] + p[2] if len(p) == 3 else []
 
 
 def p_ARG_CALL(p):
