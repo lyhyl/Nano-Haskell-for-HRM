@@ -26,7 +26,7 @@ def t_NAME(t):
 
 
 def t_CONST(t):
-    r"\d+"
+    r"-?\d+"
     t.value = int(t.value)
     return t
 
