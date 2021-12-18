@@ -8,13 +8,40 @@ tests = [
     # write read;
     # main
     # }""",
+    # """main = do {
+    # a <- add read 1;
+    # b <- sub 1 read;
+    # if gt a b
+    #     then write a
+    #     else write b;
+    # main
+    # }""",
+    # """main = do {
+    # x <- read;
+    # y <- read;
+    # if lt x 0
+    #     then if lt y 0
+    #         then write 4
+    #         else write 5
+    #     else if lt y 0
+    #         then write 5
+    #         else write 4;
+    # main
+    # }
+    # """,
     """main = do {
-    a <- add read 1;
-    b <- sub 1 read;
-    if gt a b
-        then write a
-        else write b;
+    x <- read;
+    if gt x 0
+        then print_dn x
+        else print_up x;
     main
+    }
+print_dn x = do {
+    write x;
+    a <- sub x 1;
+    if ge a 0
+        then print_dn a
+        else add a 0
     }"""
 ]
 

@@ -1,6 +1,7 @@
 from typing import List, Union
 
 header = "-- HUMAN RESOURCE MACHINE PROGRAM --"
+invalid_addr = -1
 
 
 class Instrument:
@@ -58,7 +59,7 @@ class Context:
 
     def get_var_addr(self) -> int:
         if len(self.vars_addr) == 0 or len(self.vars_addr[-1]) == 0:
-            return 1
+            return 0
         return self.vars_addr[-1][-1] + 1
 
     def name_lookup(self, name: str) -> Union[int, List[Instrument]]:
@@ -198,7 +199,7 @@ class Call(Emitter):
                 vars_addr.append(va)
                 vars_val.append(0)
             else:  # a["type"] == "CONST"
-                vars_addr.append(0)
+                vars_addr.append(invalid_addr)
                 vars_val.append(int(a["value"]))
         context.vars_addr.append(vars_addr)
         context.vars_val.append(vars_val)
@@ -247,8 +248,11 @@ class Write(Builtin):
         vars_addr = context.vars_addr[-1]
         if len(vars_addr) != 1:
             raise ValueError("'write' accepts 1 arg")
+        va = vars_addr[0]
+        if va == invalid_addr:
+            va = context.vars_val[-1][0]
         return [
-            Instrument(Instrument.CPF, vars_addr[0]),
+            Instrument(Instrument.CPF, va),
             Instrument(Instrument.OUT)
         ]
 
@@ -262,11 +266,11 @@ class Add(Builtin):
         if len(vars_addr) != 2:
             raise ValueError("'add' accepts 2 args")
         va = context.get_var_addr()
-        if 0 in vars_addr:  # has constant
-            if all(a == 0 for a in vars_addr):
+        if invalid_addr in vars_addr:  # has constant
+            if all(a == invalid_addr for a in vars_addr):
                 raise ValueError(f"invoke '{self.name}' with two constants")
             else:
-                v0c = vars_addr[0] == 0
+                v0c = vars_addr[0] == invalid_addr
                 v = vars_addr[1 if v0c else 0]
                 c = context.vars_val[-1][0 if v0c else 1]
                 ins = Instrument.INC if c > 0 else Instrument.DEC
@@ -293,11 +297,11 @@ class Sub(Builtin):
         if len(vars_addr) != 2:
             raise ValueError(f"'sub' accepts 2 args")
         va = context.get_var_addr()
-        if 0 in vars_addr:  # has constant
-            if all(a == 0 for a in vars_addr):
+        if invalid_addr in vars_addr:  # has constant
+            if all(a == invalid_addr for a in vars_addr):
                 raise ValueError(f"invoke 'sub' with two constants")
             else:
-                v0c = vars_addr[0] == 0
+                v0c = vars_addr[0] == invalid_addr
                 v = vars_addr[1 if v0c else 0]
                 c = context.vars_val[-1][0 if v0c else 1]
                 if v0c:  # const - v
@@ -337,8 +341,8 @@ class Mul(Builtin):
             raise ValueError("'mul' accepts 2 args")
         va = context.get_var_addr()
         insts = []
-        if 0 in vars_addr:  # has constant
-            if all(a == 0 for a in vars_addr):
+        if invalid_addr in vars_addr:  # has constant
+            if all(a == invalid_addr for a in vars_addr):
                 raise ValueError(f"invoke 'mul' with two constants")
             else:
                 pass
@@ -359,7 +363,7 @@ class Compare(Builtin):
         vars_addr = context.vars_addr[-1]
         if len(vars_addr) != 2:
             raise ValueError(f"'{self.name}' accepts 2 args")
-        if all(a == 0 for a in vars_addr):
+        if all(a == invalid_addr for a in vars_addr):
             raise ValueError(f"invoke '{self.name}' with two constants")
 
         if self.swap_var:
@@ -379,43 +383,6 @@ class Compare(Builtin):
             context.vars_addr[-1] = [a, b]
             a, b = context.vars_val[-1]
             context.vars_val[-1] = [a, b]
-
-        # va = context.get_var_addr()
-        # insts = []
-
-        # if 0 in vars_addr:  # has constant
-        #     if all(a == 0 for a in vars_addr):
-        #         raise ValueError(f"invoke '{self.name}' with two constants")
-        #     else:
-        #         v0c = vars_addr[0] == 0
-        #         v = vars_addr[1 if v0c else 0]
-        #         c = context.vars_val[-1][0 if v0c else 1]
-        #         if self.swap_var ^ v0c:  # const - v
-        #             ins = Instrument.INC if c > 0 else Instrument.DEC
-        #             insts.extend([
-        #                 Instrument(Instrument.CPF, v),
-        #                 Instrument(Instrument.CPT, va),
-        #                 Instrument(Instrument.SUB, va),
-        #                 Instrument(Instrument.SUB, va),
-        #                 *([Instrument(ins, va)] * abs(c))
-        #             ])
-        #         else:  # v - const
-        #             ins = Instrument.DEC if c > 0 else Instrument.INC
-        #             insts.extend([
-        #                 Instrument(Instrument.CPF, v),
-        #                 Instrument(Instrument.CPT, va),
-        #                 *([Instrument(ins, va)] * abs(c))
-        #             ])
-        # else:  # two addr
-        #     v0, v1 = vars_addr
-        #     if self.swap_var:
-        #         v0, v1 = v1, v0
-        #     insts.extend([
-        #         Instrument(Instrument.CPF, v1),
-        #         Instrument(Instrument.CPT, va),
-        #         Instrument(Instrument.CPF, v0),
-        #         Instrument(Instrument.SUB, va)
-        #     ])
 
         context.jz = self.jz
         context.jn = self.jn
