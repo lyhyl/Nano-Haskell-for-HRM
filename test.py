@@ -36,13 +36,20 @@ tests = [
         else print_up x;
     main
     }
-print_dn x = do {
-    write x;
-    a <- sub x 1;
-    if ge a 0
-        then print_dn a
-        else add a 0
-    }"""
+print_dn x
+    | eq x 0 = write x
+    | gt x 0 = do {
+        write x;
+        a <- sub x 1;
+        print_dn a
+        }
+print_up x
+    | eq x 0 = write x
+    | lt x 0 = do {
+        write x;
+        a <- add x 1;
+        print_up a
+        }"""
 ]
 
 def print_code(insts: List[Instrument]) -> None:
