@@ -96,24 +96,6 @@ class Expression(Emitter):
         return self.emitter.emit(context)
 
 
-class Guards(Emitter):
-    def __init__(self, guards: List[Tuple[Expression, Expression]]) -> None:
-        self.guards = guards
-
-    def emit(self, context: Context) -> List[Instrument]:
-        end_lab = context.get_next_label()
-        insts = []
-        for cond, expr in self.guards:
-            insts.extend(cond.emit(context))
-            next_beg = context.get_next_label()
-            insts.extend(context.get_jmp_instruments(next_beg))
-            insts.extend(expr.emit(context))
-            insts.append(Instrument(Instrument.JMP, end_lab))
-            insts.append(Instrument(Instrument.LAB, next_beg))
-        insts.append(Instrument(Instrument.LAB, end_lab))
-        return insts
-
-
 class DoBlock(Emitter):
     def __init__(self, exprs: List[Emitter]) -> None:
         self.exprs = exprs
@@ -163,6 +145,22 @@ class Assignment(Emitter):
         context.vars_name[-1].append(self.var_name)
         context.vars_val[-1].append(0)
         return insts
+
+
+class Guards(Emitter):
+    def __init__(self, guards: List[Tuple[Expression, Expression]]) -> None:
+        self.guards = guards
+        self.emitter = self.desugar(self.guards)
+    
+    def desugar(self, guards: List[Tuple[Expression, Expression]]) -> IfBlock:
+        cond, expr = guards[0]
+        if len(guards) == 1:
+            return IfBlock(cond, expr, Nop())
+        else:
+            return IfBlock(cond, expr, self.desugar(guards[1:]))
+
+    def emit(self, context: Context) -> List[Instrument]:
+        return self.emitter.emit(context)
 
 
 class Function(Emitter):
@@ -258,6 +256,14 @@ class Builtin(Emitter):
 
     def emit(self, context: Context) -> List[Instrument]:
         raise NotImplementedError()
+
+
+class Nop(Builtin):
+    def __init__(self) -> None:
+        super().__init__("nop")
+    
+    def emit(self, context: Context) -> List[Instrument]:
+        return []
 
 
 class Read(Builtin):

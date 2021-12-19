@@ -1,5 +1,5 @@
 from typing import List
-from compiler import Add, Call, Compare, Context, Instrument, Read, Sub, Write, header
+from compiler import Add, Call, Compare, Context, Instrument, Nop, Read, Sub, Write, header
 from optimizer import optimize
 from yacc import parser
 
@@ -16,38 +16,56 @@ tests = [
     #     else write b;
     # main
     # }""",
-    # """main = do {
-    # x <- read;
-    # y <- read;
-    # if lt x 0
-    #     then if lt y 0
-    #         then write 4
-    #         else write 5
-    #     else if lt y 0
-    #         then write 5
-    #         else write 4;
-    # main
-    # }
-    # """,
     """main = do {
     x <- read;
-    if gt x 0
-        then print_dn x
-        else print_up x;
+    y <- read;
+    if lt x 0
+        then if lt y 0
+            then write 4
+            else write 5
+        else if gt y 0
+            then write 4
+            else write 5;
     main
-    }
-print_dn x
-    | eq x 0 = write x
-    | gt x 0 = do {
-        write x;
-        print_dn (sub x 1)
-        }
-print_up x
-    | eq x 0 = write x
-    | lt x 0 = do {
-        write x;
-        print_up (add x 1)
-        }"""
+    }""",
+#     """main = do {
+#     x <- read;
+#     if gt x 0
+#         then print_dn x
+#         else print_up x;
+#     main
+#     }
+# print_dn x
+#     | eq x 0 = write x
+#     | gt x 0 = do {
+#         write x;
+#         print_dn (sub x 1)
+#         }
+# print_up x
+#     | eq x 0 = write x
+#     | lt x 0 = do {
+#         write x;
+#         print_up (add x 1)
+#         }""",
+#     """main = do {
+#     x <- read;
+#     if gt x 0
+#         then print_dn x
+#         else print_up x;
+#     main
+#     }
+# print_dn x = if eq x 0
+#     then write x
+#     else do {
+#         write x;
+#         print_dn (sub x 1)
+#         }
+# print_up x = if eq x 0
+#     then write x
+#     else do {
+#         write x;
+#         print_up (add x 1)
+#         }"""
 ]
 
 def print_code(insts: List[Instrument]) -> None:
@@ -66,12 +84,12 @@ if __name__ == "__main__":
                 Add(), Sub(),
                 Compare("gt", False, True, False),
                 Compare("ge", True, True, False),
-                Compare("lt", False, True, True),
-                Compare("le", True, True, True),
-                Compare("eq", True, False, False, False),
-                Compare("neq", True, False, False, True)
+                Compare("lt", False, True, True, True),
+                Compare("le", True, True, True, True),
+                Compare("eq", True, False, False, True),
+                Compare("neq", True, False, False, False)
             ],
-            [Read()],
+            [Read(), Nop()],
             funcs
         )
         try:
