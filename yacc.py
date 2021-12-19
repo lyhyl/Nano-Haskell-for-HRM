@@ -1,6 +1,6 @@
 import ply.yacc as yacc
 
-from compiler import (Assignment, Call, DoBlock, Expression, Function, IfBlock)
+from compiler import (Assignment, Call, DoBlock, Expression, Function, Guards, IfBlock)
 from lex import tokens
 
 
@@ -11,14 +11,29 @@ def p_PROG(p):
 
 
 def p_FUNC(p):
-    "FUNC : NAME PARMS '=' EXPR"
-    p[0] = Function(p[1], p[2], p[4])
+    """FUNC : NAME PARMS '=' EXPR
+            | NAME PARMS GUARDS"""
+    if len(p) == 5:
+        p[0] = Function(p[1], p[2], p[4])
+    else:
+        p[0] = Function(p[1], p[2], Guards(p[3]))
 
 
 def p_PARMS(p):
     """PARMS : NAME PARMS
              | empty"""
     p[0] = [p[1]] + p[2] if len(p) == 3 else []
+
+
+def p_GUARDS(p):
+    """GUARDS : GUARD GUARDS
+              | GUARD"""
+    p[0] = [p[1]] + p[2] if len(p) == 3 else [p[1]]
+
+
+def p_GUARD(p):
+    "GUARD : '|' EXPR '=' EXPR"
+    p[0] = (p[2], p[4])
 
 
 def p_EXPR(p):
