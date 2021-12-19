@@ -1,7 +1,7 @@
 # nano-Haskell for HRM
 
 ## Example
-puzzle 1-1
+puzzle 2
 ```
 main = do {
     write read;
@@ -26,9 +26,9 @@ main = do {
 PROG = FUNC PROG | empty
 FUNC = NAME PARMS "=" EXPR | NAME PARMS GUARDS
 PARMS = NAME PARMS | empty
-GUARDS = GUARD GUARDS | empty
+GUARDS = GUARD GUARDS | GUARD
 GUARD = "|" EXPR "=" EXPR
-EXPR = "do" "{" STMTS "}" | "if" EXPR "then" EXPR "else" EXPR | CALL | NAME
+EXPR = "do" "{" STMTS "}" | "if" EXPR "then" EXPR "else" EXPR | CALL (| NAME???)
 STMTS = STMT ";" STMTS | EXPR
 STMT = ASSG | EXPR
 ASSG = NAME "<-" EXPR
@@ -56,38 +56,47 @@ CONST = r"-?\d+"
 The default entry point is `main` function.
 
 ## Recursion
-Currently, support **non-cross parameter-less recursion** only.
+Currently, support **tail self-recursion** only.
 
 ## Optimization
 - Redundant copy
 ```
-    ...
+...
     COPYTO x
     COPYFROM x
-    ...
+...
 ```
 
 - Unref label
 ```
-    ...
+...
 a:
-    ...
+...
 ```
 
 - Continuous label
 ```
-    ...
+...
 a:
 b:
-    ...
+...
+```
+
+- Dead code
+```
+...
+    JUMP b
+    ...No label inside...
+c:
+...
 ```
 
 - Immediate jump
 ```
-    ...
+...
     JUMP a
-    ...
+...
 a:
     JUMP b
-    ...
+...
 ```

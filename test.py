@@ -40,15 +40,13 @@ print_dn x
     | eq x 0 = write x
     | gt x 0 = do {
         write x;
-        a <- sub x 1;
-        print_dn a
+        print_dn (sub x 1)
         }
 print_up x
     | eq x 0 = write x
     | lt x 0 = do {
         write x;
-        a <- add x 1;
-        print_up a
+        print_up (add x 1)
         }"""
 ]
 

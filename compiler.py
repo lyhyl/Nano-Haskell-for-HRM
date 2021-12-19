@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Tuple, Union
 
 header = "-- HUMAN RESOURCE MACHINE PROGRAM --"
 invalid_addr = -1
@@ -71,6 +71,17 @@ class Context:
         else:
             raise ValueError(f"name {name} not found")
 
+    def get_jmp_instruments(self, lab: int) -> List[Instrument]:
+        if self.jz and self.jn:
+            js = [Instrument.JZ, Instrument.JN]
+        elif self.jz or self.jn:
+            js = [Instrument.JZ if self.jz else Instrument.JN]
+        else:
+            js = [Instrument.JZ, Instrument.JN]
+        self.jz = False
+        self.jn = False
+        return [Instrument(j, lab) for j in js]
+
 
 class Emitter:
     def emit(self, context: Context) -> List[Instrument]:
@@ -83,6 +94,24 @@ class Expression(Emitter):
 
     def emit(self, context: Context) -> List[Instrument]:
         return self.emitter.emit(context)
+
+
+class Guards(Emitter):
+    def __init__(self, guards: List[Tuple[Expression, Expression]]) -> None:
+        self.guards = guards
+
+    def emit(self, context: Context) -> List[Instrument]:
+        end_lab = context.get_next_label()
+        insts = []
+        for cond, expr in self.guards:
+            insts.extend(cond.emit(context))
+            next_beg = context.get_next_label()
+            insts.extend(context.get_jmp_instruments(next_beg))
+            insts.extend(expr.emit(context))
+            insts.append(Instrument(Instrument.JMP, end_lab))
+            insts.append(Instrument(Instrument.LAB, next_beg))
+        insts.append(Instrument(Instrument.LAB, end_lab))
+        return insts
 
 
 class DoBlock(Emitter):
@@ -111,14 +140,7 @@ class IfBlock(Emitter):
         b0, b1 = self.tb, self.fb
         if context.swap_branch:
             b0, b1 = b1, b0
-        if context.jz and context.jn:
-            b0, b1 = b1, b0
-            ins = Instrument.JZ
-        elif context.jz or context.jn:
-            ins = Instrument.JZ if context.jz else Instrument.JN
-        else:
-            raise RuntimeError("compiler failure")
-        insts.append(Instrument(ins, slab))
+        insts.extend(context.get_jmp_instruments(slab))
         insts.extend(b0.emit(context))
         insts.append(Instrument(Instrument.JMP, elab))
         insts.append(Instrument(Instrument.LAB, slab))
@@ -144,14 +166,14 @@ class Assignment(Emitter):
 
 
 class Function(Emitter):
-    def __init__(self, name: str, params: List[str], expr: Expression) -> None:
+    def __init__(self, name: str, params: List[str], body: Union[Expression, Guards]) -> None:
         self.name = name
         self.params = params
-        self.expr = expr
+        self.body = body
 
     def emit(self, context: Context) -> List[Instrument]:
         context.vars_name.append(self.params.copy())
-        insts = self.expr.emit(context)
+        insts = self.body.emit(context)
         context.vars_name.pop()
         return insts
 
@@ -164,19 +186,44 @@ class Call(Emitter):
     def emit(self, context: Context) -> List[Instrument]:
         if self.func_name in context.call_chain:
             if self.func_name == context.call_chain[-1]:
-                if len(context.funcs[self.func_name].params) > 0:
-                    raise RecursionError(self.func_name)
-                else:
-                    return [Instrument(Instrument.JMP, context.call_label[-1])]
-            raise RecursionError(self.func_name)
+                # if len(context.funcs[self.func_name].params) > 0:
+                base_va = context.vars_addr[-1][0]
+                insts, va, vv = self.prepare_args(context, base_va)
+                assert va == context.vars_addr[-1][:len(self.args)]
+                insts.append(Instrument(Instrument.JMP, context.call_label[-1]))
+                return insts
+            else:
+                raise RecursionError(self.func_name)
 
         if self.func_name in context.builtin_actns.keys():
             return context.builtin_actns[self.func_name].emit(context)
 
-        insts = []
-
         base_va = context.get_var_addr()
+        insts, vars_addr, vars_val = self.prepare_args(context, base_va)
+        context.vars_addr.append(vars_addr)
+        context.vars_val.append(vars_val)
+
+        context.call_chain.append(self.func_name)
+        call_label = context.get_next_label()
+        context.call_label.append(call_label)
+        insts.append(Instrument(Instrument.LAB, call_label))
+
+        if self.func_name in context.builtin_funcs.keys():
+            insts.extend(context.builtin_funcs[self.func_name].emit(context))
+        else:
+            insts.extend(context.funcs[self.func_name].emit(context))
+
+        context.vars_val.pop()
+        context.vars_addr.pop()
+
+        context.call_label.pop()
+        context.call_chain.pop()
+
+        return insts
+
+    def prepare_args(self, context: Context, base_va: int):
         local_va = 0
+        insts = []
         vars_addr = []
         vars_val = []
         for a in self.args:
@@ -201,26 +248,7 @@ class Call(Emitter):
             else:  # a["type"] == "CONST"
                 vars_addr.append(invalid_addr)
                 vars_val.append(int(a["value"]))
-        context.vars_addr.append(vars_addr)
-        context.vars_val.append(vars_val)
-
-        context.call_chain.append(self.func_name)
-        call_label = context.get_next_label()
-        context.call_label.append(call_label)
-        insts.append(Instrument(Instrument.LAB, call_label))
-
-        if self.func_name in context.builtin_funcs.keys():
-            insts.extend(context.builtin_funcs[self.func_name].emit(context))
-        else:
-            insts.extend(context.funcs[self.func_name].emit(context))
-
-        context.vars_val.pop()
-        context.vars_addr.pop()
-
-        context.call_label.pop()
-        context.call_chain.pop()
-
-        return insts
+        return insts, vars_addr, vars_val
 
 
 class Builtin(Emitter):
@@ -367,8 +395,8 @@ class Compare(Builtin):
             raise ValueError(f"invoke '{self.name}' with two constants")
 
         if self.swap_var:
-            a, b = context.vars_name[-1]
-            context.vars_name[-1] = [a, b]
+            # a, b = context.vars_name[-1]
+            # context.vars_name[-1] = [a, b]
             a, b = context.vars_addr[-1]
             context.vars_addr[-1] = [a, b]
             a, b = context.vars_val[-1]
@@ -377,8 +405,8 @@ class Compare(Builtin):
         insts = Sub().emit(context)
 
         if self.swap_var:
-            a, b = context.vars_name[-1]
-            context.vars_name[-1] = [a, b]
+            # a, b = context.vars_name[-1]
+            # context.vars_name[-1] = [a, b]
             a, b = context.vars_addr[-1]
             context.vars_addr[-1] = [a, b]
             a, b = context.vars_val[-1]
