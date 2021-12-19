@@ -1,6 +1,6 @@
 import ply.lex as lex
 
-literals = "=;(){}"
+literals = "|=;(){}"
 
 reserved = {
     'do': 'DO',

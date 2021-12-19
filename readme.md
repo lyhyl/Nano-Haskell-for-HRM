@@ -24,9 +24,11 @@ main = do {
 ## BNF grammar
 ```
 PROG = FUNC PROG | empty
-FUNC = NAME PARMS "=" EXPR
+FUNC = NAME PARMS "=" EXPR | NAME PARMS GUARDS
 PARMS = NAME PARMS | empty
-EXPR = "do" "{" STMTS "}" | "if" EXPR "then" EXPR "else" EXPR | CALL
+GUARDS = GUARD GUARDS | empty
+GUARD = "|" EXPR "=" EXPR
+EXPR = "do" "{" STMTS "}" | "if" EXPR "then" EXPR "else" EXPR | CALL | NAME
 STMTS = STMT ";" STMTS | EXPR
 STMT = ASSG | EXPR
 ASSG = NAME "<-" EXPR
