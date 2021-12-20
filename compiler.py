@@ -1,7 +1,7 @@
 from typing import List, Tuple, Union
 
 header = "-- HUMAN RESOURCE MACHINE PROGRAM --"
-invalid_addr = -1
+indirect = 64
 
 
 class Instrument:
@@ -28,6 +28,9 @@ class Instrument:
             return f"{chr(self.arg + ord('a'))}:"
         elif self.code in [Instrument.IN, Instrument.OUT]:
             return f"{pad}{self.code}"
+        elif self.code.startswith("COPY"):
+            addr = str(self.arg) if self.arg < indirect else f"[{self.arg - indirect}]"
+            return f"{pad}{self.code:9s}{addr}"
         elif self.code.startswith("JUMP"):
             return f"{pad}{self.code:9s}{chr(self.arg + ord('a'))}"
         else:
@@ -51,6 +54,7 @@ class Context:
         self.jn = False
         self.swap_branch = False
         self.label_count = 0
+        self.pending_addr_offset = 0
 
     def get_next_label(self) -> int:
         label = self.label_count
@@ -60,16 +64,25 @@ class Context:
     def get_var_addr(self) -> int:
         if len(self.vars_addr) == 0 or len(self.vars_addr[-1]) == 0:
             return 0
-        return self.vars_addr[-1][-1] + 1
+        return abs(self.vars_addr[-1][-1]) + 1 + self.pending_addr_offset
 
-    def name_lookup(self, name: str) -> Union[int, List[Instrument]]:
+    def name_lookup(self, name: str) -> List[Instrument]:
         names = self.vars_name[-1]
         if name in names:
-            return self.vars_addr[-1][names.index(name)]
+            va = self.vars_addr[-1][names.index(name)]
+            return [Instrument(Instrument.CPF, va)]
         elif name in self.builtin_actns.keys():
             return self.builtin_actns[name].emit(self)
         else:
             raise ValueError(f"name {name} not found")
+    
+    def func_lookup(self, name: str) -> List[Instrument]:
+        if name in self.builtin_funcs.keys():
+            return self.builtin_funcs[name].emit(self)
+        elif name in self.funcs.keys():
+            return self.funcs[name].emit(self)
+        else:
+            raise ValueError(f"func {name} not found")
 
     def get_jmp_instruments(self, lab: int) -> List[Instrument]:
         if self.jz and self.jn:
@@ -184,10 +197,15 @@ class Call(Emitter):
     def emit(self, context: Context) -> List[Instrument]:
         if self.func_name in context.call_chain:
             if self.func_name == context.call_chain[-1]:
-                # if len(context.funcs[self.func_name].params) > 0:
-                base_va = context.vars_addr[-1][0]
-                insts, va, vv = self.prepare_args(context, base_va)
-                assert va == context.vars_addr[-1][:len(self.args)]
+                if len(context.funcs[self.func_name].params) > 0:
+                    insts, va, vv = self.prepare_args(context)
+                    tva = context.vars_addr[-1][:len(self.args)]
+                    assert len(va) == len(tva)
+                    for f, t in zip(va, tva):
+                        insts.append(Instrument(Instrument.CPF, f))
+                        insts.append(Instrument(Instrument.CPT, t))
+                else:
+                    insts = []
                 insts.append(Instrument(Instrument.JMP, context.call_label[-1]))
                 return insts
             else:
@@ -196,20 +214,16 @@ class Call(Emitter):
         if self.func_name in context.builtin_actns.keys():
             return context.builtin_actns[self.func_name].emit(context)
 
-        base_va = context.get_var_addr()
-        insts, vars_addr, vars_val = self.prepare_args(context, base_va)
+        insts, vars_addr, vars_val = self.prepare_args(context)
         context.vars_addr.append(vars_addr)
         context.vars_val.append(vars_val)
 
         context.call_chain.append(self.func_name)
         call_label = context.get_next_label()
         context.call_label.append(call_label)
-        insts.append(Instrument(Instrument.LAB, call_label))
 
-        if self.func_name in context.builtin_funcs.keys():
-            insts.extend(context.builtin_funcs[self.func_name].emit(context))
-        else:
-            insts.extend(context.funcs[self.func_name].emit(context))
+        insts.append(Instrument(Instrument.LAB, call_label))
+        insts.extend(context.func_lookup(self.func_name))
 
         context.vars_val.pop()
         context.vars_addr.pop()
@@ -219,33 +233,30 @@ class Call(Emitter):
 
         return insts
 
-    def prepare_args(self, context: Context, base_va: int):
+    def prepare_args(self, context: Context):
+        base_va = context.get_var_addr()
         local_va = 0
         insts = []
         vars_addr = []
         vars_val = []
         for a in self.args:
+            va = base_va + local_va
+            local_va += 1
+            context.pending_addr_offset = local_va
             if isinstance(a, Emitter):
-                va = base_va + local_va
-                local_va += 1
                 insts.extend(a.emit(context))
                 insts.append(Instrument(Instrument.CPT, va))
                 vars_addr.append(va)
                 vars_val.append(None)
             elif a["type"] == "NAME":
-                v = context.name_lookup(a["value"])
-                if isinstance(v, int):
-                    va = v
-                else:
-                    va = base_va + local_va
-                    local_va += 1
-                    insts.extend(v)
-                    insts.append(Instrument(Instrument.CPT, va))
+                insts.extend(context.name_lookup(a["value"]))
+                insts.append(Instrument(Instrument.CPT, va))
                 vars_addr.append(va)
                 vars_val.append(0)
             else:  # a["type"] == "CONST"
-                vars_addr.append(invalid_addr)
+                vars_addr.append(-(va + 1))
                 vars_val.append(int(a["value"]))
+        context.pending_addr_offset = 0
         return insts, vars_addr, vars_val
 
 
@@ -266,6 +277,22 @@ class Nop(Builtin):
         return []
 
 
+class Addr(Builtin):
+    def __init__(self) -> None:
+        super().__init__("addr")
+
+    def emit(self, context: Context) -> List[Instrument]:
+        vars_val = context.vars_val[-1]
+        vars_addr = context.vars_addr[-1]
+        if len(vars_addr) != 1:
+            raise ValueError("'addr' accepts 1 arg")
+        # return [Instrument(Instrument.CPF, -vars_val[0])]
+        if vars_addr[0] < 0:
+            return [Instrument(Instrument.CPF, vars_val[0])]
+        else:
+            return [Instrument(Instrument.CPF, vars_addr[0] + indirect)]
+
+
 class Read(Builtin):
     def __init__(self) -> None:
         super().__init__("read")
@@ -283,8 +310,8 @@ class Write(Builtin):
         if len(vars_addr) != 1:
             raise ValueError("'write' accepts 1 arg")
         va = vars_addr[0]
-        if va == invalid_addr:
-            va = context.vars_val[-1][0]
+        if va < 0:
+            raise ValueError("'write' accepts a var")
         return [
             Instrument(Instrument.CPF, va),
             Instrument(Instrument.OUT)
@@ -300,11 +327,11 @@ class Add(Builtin):
         if len(vars_addr) != 2:
             raise ValueError("'add' accepts 2 args")
         va = context.get_var_addr()
-        if invalid_addr in vars_addr:  # has constant
-            if all(a == invalid_addr for a in vars_addr):
+        if any(a < 0 for a in vars_addr):  # has constant
+            if all(a < 0 for a in vars_addr):
                 raise ValueError(f"invoke '{self.name}' with two constants")
             else:
-                v0c = vars_addr[0] == invalid_addr
+                v0c = vars_addr[0] < 0
                 v = vars_addr[1 if v0c else 0]
                 c = context.vars_val[-1][0 if v0c else 1]
                 ins = Instrument.INC if c > 0 else Instrument.DEC
@@ -331,11 +358,11 @@ class Sub(Builtin):
         if len(vars_addr) != 2:
             raise ValueError(f"'sub' accepts 2 args")
         va = context.get_var_addr()
-        if invalid_addr in vars_addr:  # has constant
-            if all(a == invalid_addr for a in vars_addr):
+        if any(a < 0 for a in vars_addr):  # has constant
+            if all(a < 0 for a in vars_addr):
                 raise ValueError(f"invoke 'sub' with two constants")
             else:
-                v0c = vars_addr[0] == invalid_addr
+                v0c = vars_addr[0] < 0
                 v = vars_addr[1 if v0c else 0]
                 c = context.vars_val[-1][0 if v0c else 1]
                 if v0c:  # const - v
@@ -365,26 +392,6 @@ class Sub(Builtin):
             ]
 
 
-class Mul(Builtin):
-    def __init__(self) -> None:
-        super().__init__("mul")
-
-    def emit(self, context: Context) -> List[Instrument]:
-        vars_addr = context.vars_addr[-1]
-        if len(vars_addr) != 2:
-            raise ValueError("'mul' accepts 2 args")
-        va = context.get_var_addr()
-        insts = []
-        if invalid_addr in vars_addr:  # has constant
-            if all(a == invalid_addr for a in vars_addr):
-                raise ValueError(f"invoke 'mul' with two constants")
-            else:
-                pass
-        else:  # two addr
-            pass
-        return insts
-
-
 class Compare(Builtin):
     def __init__(self, name: str, jz: bool, jn: bool, swap_var: bool, swap_branch: bool = False) -> None:
         super().__init__(name)
@@ -397,7 +404,7 @@ class Compare(Builtin):
         vars_addr = context.vars_addr[-1]
         if len(vars_addr) != 2:
             raise ValueError(f"'{self.name}' accepts 2 args")
-        if all(a == invalid_addr for a in vars_addr):
+        if all(a < 0 for a in vars_addr):
             raise ValueError(f"invoke '{self.name}' with two constants")
 
         if self.swap_var:

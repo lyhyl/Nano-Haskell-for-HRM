@@ -1,5 +1,5 @@
 from typing import List
-from compiler import Add, Call, Compare, Context, Instrument, Nop, Read, Sub, Write, header
+from compiler import Add, Addr, Call, Compare, Context, Instrument, Nop, Read, Sub, Write, header
 from optimizer import optimize
 from yacc import parser
 
@@ -9,25 +9,25 @@ tests = [
     # main
     # }""",
     # """main = do {
-    # a <- add read 1;
-    # b <- sub 1 read;
+    # a <- read;
+    # b <- read;
     # if gt a b
     #     then write a
     #     else write b;
     # main
+    # }"""
+    # """main = do {
+    # x <- read;
+    # y <- read;
+    # if lt x 0
+    #     then if lt y 0
+    #         then write (addr 4)
+    #         else write (addr 5)
+    #     else if gt y 0
+    #         then write (addr 4)
+    #         else write (addr 5);
+    # main
     # }""",
-    """main = do {
-    x <- read;
-    y <- read;
-    if lt x 0
-        then if lt y 0
-            then write 4
-            else write 5
-        else if gt y 0
-            then write 4
-            else write 5;
-    main
-    }""",
 #     """main = do {
 #     x <- read;
 #     if gt x 0
@@ -65,7 +65,42 @@ tests = [
 #     else do {
 #         write x;
 #         print_up (add x 1)
-#         }"""
+#         }""",
+# """main = do {
+#     write (mul read read (addr 9));
+#     main
+# }
+
+# mul a b acc
+#     | eq a 0 = addr 9
+#     | eq b 0 = addr 9
+#     | gt b 0 = mul a (sub b 1) (add acc a)""",
+"""main = do {
+    fib (addr 9) (add (addr 9) 1) read;
+    main
+}
+
+fib a b x
+    | le b x = do {
+        write b;
+        fib b (add a b) x
+    }""",
+# """main = do {
+#     write (addr read);
+#     main
+# }
+# """,
+# """main = do {
+#     pt read;
+#     main
+# }
+# pt x = if neq (addr x) 0
+#             then do {
+#                 write (addr x);
+#                 pt (add x 1)
+#             }
+#             else nop
+# """
 ]
 
 def print_code(insts: List[Instrument]) -> None:
@@ -80,6 +115,7 @@ if __name__ == "__main__":
         entry = Call("main", [])
         context = Context(
             [
+                Addr(),
                 Write(),
                 Add(), Sub(),
                 Compare("gt", False, True, False),
